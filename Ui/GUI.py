@@ -284,6 +284,7 @@ class MainWindow(QMainWindow):
         proc.start()
 
 if __name__ == "__main__":
+    print("test")
     app = QApplication(sys.argv)
     w = MainWindow()
     w.show()
