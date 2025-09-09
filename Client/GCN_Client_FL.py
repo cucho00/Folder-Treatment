@@ -6,9 +6,8 @@ import numpy as np
 import torch
 from sklearn.metrics import accuracy_score  # 정확도 계산
 
-from Local_GCN_Module import Local_GCN, train_fn, predict_fn
-from Folder_Tree import build_graph_from_folder
-
+from .Local_GCN_Module import Local_GCN, train_fn, predict_fn
+from .Folder_Tree import PyG_Dataset 
 
 # 평가 함수 (evaluate)
 def evaluate_model(model, data):

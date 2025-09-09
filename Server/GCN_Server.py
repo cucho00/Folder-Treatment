@@ -1,6 +1,6 @@
 # server.py
 import flwr as fl
-from flwr.server import start_server
+from flwr.server import ServerConfig
 from flwr.server.strategy import FedAvg
 
 # 서버가 가지고 있는 모델의 가중치를 클라이언트에게 제공
@@ -27,6 +27,28 @@ def evaluate_metrics_aggregation_fn(metrics):
         return {"accuracy": 0.0}
     accuracy = sum(num_examples * m["accuracy"] for num_examples, m in metrics) / total_examples
     return {"accuracy": accuracy}
+
+
+def make_strategy():
+    return FedAvg(
+        min_fit_clients=1,
+        min_available_clients=1,
+        min_evaluate_clients=0,   # 평가 비활성 권장
+        fraction_fit=1.0,
+        fraction_evaluate=0.0,    # 평가 요청 안 함
+        evaluate_fn=None,         # 서버 글로벌 평가 끔
+        fit_metrics_aggregation_fn=fit_metrics_aggregation_fn,
+        evaluate_metrics_aggregation_fn=evaluate_metrics_aggregation_fn,
+    )
+
+def make_config():
+    return ServerConfig(
+        num_rounds=1,      # 테스트는 짧게
+        round_timeout=120, # 영구 대기 방지
+    )
+
+
+"""
 
 # 클라이언트에서 전달된 가중치 평균을 내서 서버 모델 업데이트 (기본 전략)
 strategy = FedAvg(              
@@ -58,3 +80,4 @@ start_server(
 
 if __name__ == "__main__":
     start_server()
+"""
