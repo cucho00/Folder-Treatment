@@ -30,3 +30,4 @@ python3 GUI_work.py
 
 실행 시 GUI.py 내부에 클라이언트, 서버 py 파일 경로를 하드코딩 해두었으니 반드시 해당 폴더 구조를 유지해야 함
 
+# GCN-Folder-Project
