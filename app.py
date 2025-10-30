@@ -11,7 +11,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 
 # ✅ Tesseract 실행 파일 경로 지정 (Windows 기준)
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+pytesseract.pytesseract.tesseract_cmd = r"/opt/homebrew/bin/tesseract"
 
 # ===== CNN 모델 (이미지 특징 추출용) =====
 resnet_model = models.resnet18(pretrained=True)
@@ -25,7 +25,7 @@ transform = transforms.Compose([
 
 
 TEXT_THRESHOLD = 30
-TEXT_SIMILARITY_THRESHOLD = 0.7
+TEXT_SIMILARITY_THRESHOLD = 0.9
 IMAGE_SIMILARITY_THRESHOLD = 84
 IMAGE_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.gif')
 

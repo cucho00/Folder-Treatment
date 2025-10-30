@@ -1,0 +1,245 @@
+/* ===== 기본 설정 ===== */
+QWidget {
+    font-family: 'Noto Sans KR', '맑은 고딕', sans-serif;
+    font-size: 14px;
+    color: #34495E;
+}
+
+/* ===== 1. 메인 레이아웃 ===== */
+#Sidebar {
+    background-color: #FFFFFF;
+    border-right: 1px solid #E0E0E0;
+    /* (그림자) */
+    box-shadow: 2px 0 5px rgba(0, 0, 0, 0.05); 
+}
+#ContentArea {
+    background-color: #F8F9FB;
+}
+
+/* ===== 2. 사이드바 위젯 ===== */
+#Sidebar QLabel#titleLabel {
+    font-size: 26px;
+    font-weight: 700;
+    color: #2C3E50;
+    padding-bottom: 5px;
+}
+#Sidebar QLabel {
+    font-size: 13px;
+    font-weight: 500;
+    color: #566573;
+}
+#Sidebar QLineEdit {
+    border: 1px solid #BDC3C7;
+    border-radius: 5px;
+    padding: 7px 10px;
+    background-color: white;
+}
+#Sidebar QLineEdit:read-only {
+    background-color: #F4F6F6;
+}
+#Sidebar QPushButton {
+    background-color: #3498DB;
+    color: white;
+    font-weight: 500;
+    border: none;
+    border-radius: 5px;
+    padding: 9px 14px;
+}
+#Sidebar QPushButton:hover {
+    background-color: #5DADE2;
+}
+#Sidebar QLabel#statusLabel {
+    background-color: #ECF0F1;
+    color: #2874A6;
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: 5px;
+    padding: 10px;
+    border: 1px solid #D5DBDB;
+}
+#Sidebar QCheckBox {
+    font-size: 15px;
+    font-weight: 500;
+    color: #34495E;
+    padding: 5px;
+}
+#Sidebar QCheckBox::indicator {
+    width: 20px;
+    height: 20px;
+}
+
+/* ===== 3. 컨텐츠 영역 (탭) ===== */
+QTabWidget#TabWidget::pane {
+    border: none;
+    background-color: #F8F9FB;
+}
+QTabBar::tab {
+    background: #EAECEE;
+    border: 1px solid #D5DBDB;
+    border-bottom: none;
+    padding: 10px 25px;
+    font-size: 15px;
+    font-weight: 500;
+    color: #566573;
+    
+    /* 탭 상단 모서리 둥글게 */
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+}
+QTabBar::tab:selected {
+    background: #F8F9FB; /* 컨텐츠 영역과 동일한 색 */
+    color: #3498DB;
+    border-bottom: 1px solid #F8F9FB; /* 아래쪽 경계선 숨기기 */
+}
+QTabBar::tab:!selected {
+    margin-top: 3px; /* 선택되지 않은 탭 살짝 내리기 */
+}
+QTabBar::tab:!selected:hover {
+    background: #F4F6F6;
+}
+
+/* 탭 내부 페이지 */
+#tabTitle {
+    font-size: 20px;
+    font-weight: 600;
+    color: #2C3E50;
+    padding-bottom: 4px;
+    border-bottom: 2px solid #E0E0E0;
+}
+QPlainTextEdit {
+    border: 1px solid #D5DBDB;
+    background-color: #FFFFFF;
+    border-radius: 5px;
+    padding: 5px;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 13px;
+    color: #2C3E50;
+}
+/* 탭 내부의 일반 버튼 (추론/학습) */
+#ContentArea QPushButton {
+    background-color: #2ECC71;
+    color: white;
+    font-size: 15px;
+    font-weight: 500;
+    border: none;
+    border-radius: 5px;
+    padding: 12px 16px;
+    min-height: 30px;
+}
+#ContentArea QPushButton:hover {
+    background-color: #58D68D;
+}
+#ContentArea QPushButton:disabled {
+    background-color: #D5DBDB;
+    color: #909090;
+}
+/* 탭 내부의 특별 버튼 (중복 정리) */
+#ContentArea QPushButton#SpecialButton {
+    background-color: #E74C3C;
+}
+#ContentArea QPushButton#SpecialButton:hover {
+    background-color: #EC7063;
+}
+
+/* ===== 4. 다이얼로그 (GUI_work2) 공용 스타일 ===== */
+QDialog {
+    background-color: #F8F9FB;
+}
+QDialog QGroupBox {
+    background-color: #FFFFFF;
+    border: 1px solid #E0E0E0;
+    border-radius: 8px;
+    margin-top: 12px;
+    padding: 10px;
+}
+QDialog QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 10px;
+    padding: 0 5px;
+    background-color: #FFFFFF;
+    color: #3498DB;
+    font-size: 16px;
+    font-weight: 600;
+}
+/* 그룹 박스 안의 그룹 박스 (파일 목록) */
+QDialog QGroupBox#InnerGroup {
+    background-color: #FDFEFE;
+    border: 1px dashed #D5DBDB;
+    padding: 15px;
+    margin-top: 8px;
+}
+QDialog QCheckBox {
+    font-size: 14px;
+    color: #34495E;
+}
+QDialog QCheckBox::indicator {
+    width: 18px;
+    height: 18px;
+    border: 1px solid #BDC3C7;
+    border-radius: 4px;
+    background-color: white;
+}
+QDialog QCheckBox::indicator:hover {
+    border-color: #3498DB;
+}
+QDialog QCheckBox::indicator:checked {
+    background-color: #3498DB;
+    border-color: #3498DB;
+    image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17L4 12"></path></svg>');
+}
+QDialog QCheckBox::indicator:disabled {
+    background-color: #ECF0F1;
+}
+/* 다이얼로그의 삭제 버튼 */
+QDialog QPushButton#SpecialButton {
+    background-color: #E74C3C;
+    color: white;
+    font-size: 15px;
+    font-weight: 500;
+    border: none;
+    border-radius: 5px;
+    padding: 10px 16px;
+}
+QDialog QPushButton#SpecialButton:hover {
+    background-color: #EC7063;
+}
+
+/* 콤보박스 (라벨 선택) */
+QComboBox {
+    border: 1px solid #BDC3C7;
+    border-radius: 5px;
+    padding: 6px 10px;
+    background-color: white;
+}
+QComboBox:hover {
+    border-color: #3498DB;
+}
+QComboBox::drop-down {
+    border: none;
+    padding-right: 10px;
+}
+QComboBox QAbstractItemView {
+    border: 1px solid #BDC3C7;
+    background-color: white;
+    selection-background-color: #3498DB;
+}
+
+/* 스크롤바 (공통) */
+QScrollBar:vertical {
+    border: none;
+    background: #F0F0F0;
+    width: 12px;
+    margin: 0px;
+}
+QScrollBar::handle:vertical {
+    background: #D0D0D0;
+    min-height: 25px;
+    border-radius: 6px;
+}
+QScrollBar::handle:vertical:hover {
+    background: #B0B0B0;
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0px;
+}
