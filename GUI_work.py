@@ -1,5 +1,6 @@
 # main.py (v2 - 고도화된 레이아웃 적용)
-import os, sys, socket, shutil, datetime
+import os, sys, socket, shutil
+from datetime import datetime
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -398,6 +399,9 @@ class MainWindow(QMainWindow):
         if not file_data:
             self._log_print("[INFO] 정리할 파일이 없습니다.")
             return
+        
+        for f in file_data[:10]:  # 상위 10개만 확인
+            print("mtime =", f.get("mtime"), "type =", type(f.get("mtime")))
 
         match label_class:
             case 0:
