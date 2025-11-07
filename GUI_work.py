@@ -2,6 +2,7 @@
 import os, sys, socket, shutil
 from datetime import datetime
 from pathlib import Path
+import unicodedata as ud
 
 BASE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = BASE_DIR
@@ -21,7 +22,7 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLineEdit, QLabel, QFileDialog, QTabWidget,
     QPlainTextEdit, QMessageBox, QCheckBox, QDialog, QComboBox, 
-    QDialogButtonBox, QFormLayout, QFrame, QSizePolicy
+    QDialogButtonBox, QFormLayout, QFrame, QSizePolicy, QGroupBox
 )
 
 MODEL_PATH = (BASE_DIR / "Client" / "initial_gcn_model.pth").resolve()
@@ -33,6 +34,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("GCN Folder Assistant")
         self.resize(1000, 700) # 창 크기 확대
 
+        self.ft_root = None
         self.model = None
         self.selected_dir: Path = None
         self.last_infer_major = None
@@ -138,7 +140,15 @@ class MainWindow(QMainWindow):
         dedupe2_title.setObjectName("tabTitle")
         self.btn_last = QPushButton("라벨대로 파일 정리 시작")
         self.btn_last.setObjectName("SpecialButton") # QSS용 ID (특별 버튼)
-        
+
+        self.grp_keyword = QGroupBox("키워드 필터 (이름에 포함된 파일만 대상)")
+        kw_layout = QHBoxLayout()   # 키워드 입력 레이어 (가로 나열)
+        kw_layout.addSpacing(10)
+        self.ed_kw1, self.lbl_kw1 = self._make_kw_row(kw_layout, 0)     # 키워드 1
+        self.ed_kw2, self.lbl_kw2 = self._make_kw_row(kw_layout, 1)     # 키워드 2
+        self.ed_kw3, self.lbl_kw3 = self._make_kw_row(kw_layout, 2)     # 키워드 3
+        self.grp_keyword.setLayout(kw_layout)
+
         tab_dedupe_layout.addWidget(dedupe1_title)
         tab_dedupe_layout.addSpacing(15)
         tab_dedupe_layout.addWidget(self.btn_next)
@@ -146,6 +156,8 @@ class MainWindow(QMainWindow):
 
         tab_dedupe_layout.addWidget(dedupe2_title)
         tab_dedupe_layout.addSpacing(15)
+        tab_dedupe_layout.addWidget(self.grp_keyword)
+        tab_dedupe_layout.addSpacing(10)
         tab_dedupe_layout.addWidget(self.btn_last)
         tab_dedupe_layout.addStretch(1)
 
@@ -193,6 +205,29 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self._log_print(f"[ERROR] Failed to load stylesheet: {e}")
 
+    # ---- 키워드 입력창 생성 ----
+    def _make_kw_row(self, QV :QVBoxLayout, idx: int):
+            # 입력창 생성
+            ed = QLineEdit()
+            ed.setPlaceholderText("최대 5글자 입력")
+            ed.setMaxLength(5)          # ← 핵심: 5글자 제한
+            ed.setFixedWidth(130)       # ← 입력창 폭 고정
+            ed.setFixedHeight(26)       # ← 입력창 높이 통일
+            lbl = QLabel("0/5")
+            lbl.setFixedWidth(40)
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            ed.textChanged.connect(lambda t, lab=lbl: lab.setText(f"{len(t)}/5"))   # 글자수 카운트
+
+            # 입력창이 포함될 레이아웃
+            h = QHBoxLayout()
+            h.addWidget(QLabel(f"단어 {idx+1}:"))
+            h.addWidget(ed)
+            h.addWidget(lbl)
+            h.addStretch(1)
+
+            QV.addLayout(h) # 전부 세로 레이아웃에 추가
+            return ed, lbl
+
     # ---- 유틸 함수 (기존과 동일/유사) ----
     def _log_print(self, s: str):
         self.log.appendPlainText(s)
@@ -209,6 +244,7 @@ class MainWindow(QMainWindow):
         # 탭 활성화/비활성화
         self.tabs.setTabEnabled(0, has_dir) # 분석/학습
         self.tabs.setTabEnabled(1, has_dir and self.infer_done) # 파일 정리
+        self.grp_keyword.setVisible(False)
         
         if not has_dir:
             self.tabs.setCurrentWidget(self.tabs.widget(2)) # 로그 탭으로
@@ -279,6 +315,31 @@ class MainWindow(QMainWindow):
                 continue
         return out          # 리스트 반환
 
+    # 선택한 폴더와 동일한 깊이에 정리할 폴더 생성
+    def _prepare_ft_root(self, target_dir_path: str) -> str:
+        parent_dir = os.path.dirname(os.path.abspath(target_dir_path))
+        base_name = os.path.basename(os.path.normpath(target_dir_path))  # 폴더 이름만 추출
+        ft_root = os.path.join(parent_dir, "F_T 폴더 정리" + "(" + base_name + ")")
+        try:
+            os.makedirs(ft_root, exist_ok=True)
+        except Exception as e:
+            QMessageBox.critical(self, "폴더 생성 실패",
+                                f"'F_T 폴더 정리' 폴더 생성 중 오류가 발생했습니다.\n\n경로: {ft_root}\n오류: {e}")
+            raise
+        return ft_root
+
+    def _get_keywords(self) -> list[str]:
+        """키워드 입력칸에서 값이 있는 항목만 소문자로 리스트로 반환"""
+        keywords = []
+        for ed in (self.ed_kw1, self.ed_kw2, self.ed_kw3):
+            if not ed:
+                continue
+            text = ud.normalize('NFC', ed.text().strip())   # 유니코드 문자열 추출(정규화) + 앞뒤 공백" "만 제거 (문자열 중간 공백은 유지)
+            if text:                                # 빈 문자열은 버림
+                keywords.append(text.casefold())    # lower 대신 casefold (한글/유니코드 전체의 대소문자 통일하여 비교)
+        return keywords
+    
+
     # ---------- 핸들러 함수 (기존과 동일) ----------
 
     def pick_folder(self):      
@@ -289,7 +350,8 @@ class MainWindow(QMainWindow):
             self._log_print(f"[선택 폴더] {self.selected_dir}")
             self.dataset = Client.PyG_Dataset(str(self.selected_dir))
             self.infer_done = False # 새 폴더 선택 시 추론 상태 초기화
-            self.lbl_final_label.setText("최종 라벨: (미정)")
+            self.lbl_final_label.setText("정리 방식: (미정)")
+            self.ft_root = self._prepare_ft_root(d)
         self._update_buttons()
 
     def run_inference(self):
@@ -329,7 +391,12 @@ class MainWindow(QMainWindow):
         self.lbl_final_label.setText(f"최종 라벨: {self.last_infer_major} ({class_names[self.last_infer_major]})")
         self.infer_done = True
         self._update_buttons()
+
         self.tabs.setCurrentWidget(self.tabs.widget(1)) # 정리 탭으로 자동 이동
+        if self.last_infer_major == 2:                      # 키워드 입력창 활성화
+            self.grp_keyword.setVisible(True)
+        else :         
+            self.grp_keyword.setVisible(False)
 
     def run_training(self):
         if not self._guard_dir(): return
@@ -388,9 +455,82 @@ class MainWindow(QMainWindow):
             return
         
         self._log_print("[Dedupe] 중복 분석 창 표시...")
-        dlg = ImageGroupDialog(self.dataset, parent=self)
+        dlg = ImageGroupDialog(self.dataset, self.ft_root, parent=self)
         dlg.exec()
 
+
+    def _unique_path(self, dst_dir: Path, filename: str) -> Path:
+        """
+        주어진 폴더(dst_dir)에 파일(filename)을 저장할 때,
+        동일한 이름의 파일이 이미 존재하면 --(1), --(2) 형태로
+        자동으로 이름을 바꿔서 중복을 방지하는 함수.
+        """
+        base, ext = os.path.splitext(filename)   # 이름/확장자 분리
+        candidate = dst_dir / filename           # 최초 후보 경로
+        n = 1
+
+        # 동일 이름의 파일이 존재할 때마다 숫자 증가
+        while candidate.exists():
+            candidate = dst_dir / f"{base}--({n}){ext}"
+            n += 1
+
+        return candidate
+
+    def _file_copy(self, target_root: Path, groups: dict, mode: int, base_dir: Path):
+        """
+        mode=0 → 앞 5글자 그룹 (기존 방식)
+        mode=1 → 키워드 기반: groups에 'no_match'가 있으면 원래 구조 유지로 별도 처리
+        """
+        # 키워드 기반의 경우 no_match를 분리(원래 구조 유지)
+        passthrough = []
+        if mode == 1 and "no_match" in groups:
+            passthrough = groups.pop("no_match") or []
+        elif mode == 0:
+            for key, files in list(groups.items()):
+                if len(files) == 1:
+                    src = Path(files[0])
+                    # 원래 폴더 구조 유지: target_root 기준 상대경로
+                    rel_path = src.parent.relative_to(base_dir) 
+                        # 파일의 부모폴더가 base_dir 하위에 있을 경우 base_dir 이후의 경로만 반환
+                            # (base_dir을 기준으로 해당 파일의 상대 경로 반환)
+                    passthrough.append(src)
+                    groups.pop(key, None)
+
+        
+        # 파일 이름이 비슷한 파일끼리 그룹화 하여 정리
+        for key, files in groups.items():
+            # 그룹 폴더 생성 (예: "보고서", "DATA", "IMG" 등)
+            dst_dir = target_root / "키워드 검색" / key
+            dst_dir.mkdir(parents=True, exist_ok=True)
+
+            for file_path in files:
+                src = Path(file_path)   # 문자열 형태의 폴더 경로를 Path 객체로 변경 (여러 연산 활용 가능)
+                if not src.exists():    # 파일 존재 여부 확인
+                    continue  # 이미 삭제된 파일은 건너뜀
+                try:
+                    parent_name = src.parent.name       # 부모 폴더 이름 추출
+                    stem, suf = src.stem, src.suffix    # 파일 이름과 확장자 추출
+                    new_name = f"{stem}--({parent_name}){suf}"  # "파일이름--(부모폴더).확장자" 구조의 새 파일이름 생성
+                    dst = self._unique_path(dst_dir, new_name)   # 중복 시 (1), (2) 자동 붙임 + 전체 폴더 경로 반환
+                    shutil.copy2(str(src), str(dst))      # 복사할 파일(src), 복사될 위치(dst)
+                    self._log_print(f"[COPY] {src} -> {dst}")    # 로그에 기록
+                except Exception as e:
+                    self._log_print(f"[WARN] 복사 실패: {src} ({e})")       # 로그에 기록
+
+        # 폴더로 위치 이동
+        for src in passthrough:
+            # 원래 폴더 구조 유지: target_root 기준 상대경로
+            rel_path = src.parent.relative_to(base_dir) 
+                # 파일의 부모폴더가 base_dir 하위에 있을 경우 base_dir 이후의 경로만 반환
+                    # (base_dir을 기준으로 해당 파일의 상대 경로 반환)
+            dst_dir = target_root / "필터링 제외" / rel_path
+            dst_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                dst = self._unique_path(dst_dir, src.name)   # 중복 시 (1), (2) 자동 붙임 + 전체 폴더 경로 반환
+                shutil.copy2(str(src), str(dst))      # 복사할 파일(src), 복사될 위치(dst)
+                self._log_print(f"[COPY] {src} -> {dst}")    # 로그에 기록
+            except Exception as e:
+                self._log_print(f"[WARN] 복사 실패: {src} ({e})")       # 로그에 기록
 
     def organize_files(self):
         label_class = self.last_infer_major
@@ -400,14 +540,13 @@ class MainWindow(QMainWindow):
             self._log_print("[INFO] 정리할 파일이 없습니다.")
             return
         
-        for f in file_data[:10]:  # 상위 10개만 확인
-            print("mtime =", f.get("mtime"), "type =", type(f.get("mtime")))
+        #for f in file_data[:10]:  # 상위 10개만 확인                               <테스트용>
+        #    print("mtime =", f.get("mtime"), "type =", type(f.get("mtime")))
 
         match label_class:
             case 0:
                 self._log_print("[정리 방식] 확장자 기준 정리 수행")
-                base_dir = Path(self.selected_dir)
-                target_root = base_dir / "확장자 기준 정리"
+                target_root = Path(self.ft_root) / "확장자 기준 정리"
                 target_root.mkdir(exist_ok=True)
 
                 # 확장자별 파일 분류 (딕셔너리속 리스트에 해당 파일의 전체경로 저장)
@@ -444,8 +583,7 @@ class MainWindow(QMainWindow):
                     
             case 1:
                 self._log_print("[정리 방식] 마지막 수정 날짜 기준 정리 수행")
-                base_dir = Path(self.selected_dir)
-                target_root = base_dir / "수정날짜 기준 정리"
+                target_root = Path(self.ft_root) / "수정날짜 기준 정리"
                 target_root.mkdir(exist_ok=True)
 
                 # 수정날짜별 파일 분류 (딕셔너리속 리스트에 해당 파일의 전체경로 저장)
@@ -479,53 +617,53 @@ class MainWindow(QMainWindow):
 
             case 2:
                 self._log_print("[정리 방식] 동일 이름 파일 그룹화 정리 수행")
-                base_dir = Path(self.selected_dir)
-                target_root = base_dir / "동일한 파일이름 기준 정리"
+                target_root = Path(self.ft_root) / "동일한 파일이름 기준 정리"
                 target_root.mkdir(exist_ok=True)
 
-                # 동일한 파일이름별 파일 분류 (딕셔너리속 리스트에 해당 파일의 전체경로 저장)
+                # 키워드 목록 가져오기
+                key_use = 0
+                keywords = self._get_keywords()
+                if not keywords:
+                    self._log_print("[INFO] 키워드 없음 -> 전체 파일 대상으로 앞의 5자리가 동일한 파일끼리 정리 진행")
+                else:
+                    key_use = 1
+                    self._log_print(f"[INFO] 적용 키워드: {keywords}")
+
                 samefile_groups = {}
                 for file in file_data:
                     path = Path(file["path"])     # 파일의 전체경로 값을 저장
+                    print(path)
                     if not path.exists():
                         continue
-                    
+
                     name = path.stem              # 전체파일경로 -> 확장자를 제거한 파일이름
-                    key = name[:5] if len(name) >= 5 else name  # 앞 5글자(5글자 미만은 그대로)
+                    print(keywords)
+                    if not keywords:
+                        # ---- (A) 키워드 없음: 앞 5글자 그룹 ----
+                        key = name[:5] if len(name) >= 5 else name  # 앞 5글자(5글자 미만은 그대로)
+                        if key not in samefile_groups:
+                            samefile_groups[key] = []      # 딕셔너리에 해당 키 생성
+                        samefile_groups[key].append(path)
+                    else:
+                        # ---- (B) 키워드 있음: 파일명에 키워드 포함된 것만 대상 ----
+                        name_l = name.lower()   # 이름의 소문자
+                        matched_kw = next((kw for kw in keywords if kw in name_l), None)    # keywords 안의 kw값을 하나씩 넘기며 name_l에 포함된 키워드만 걸러냄
+                            # kw for kw in keywords if kw in name_l = "for kw in keywords if kw in name_l" 조건에 맞는 kw만 반환
+                            # next() = 해당 값에서 첫번째 값만 반환 (값이 없다면 None 반환)
+                        if matched_kw:    # 키워드(소문자) 각 값을 하나씩 대입하여 name_l(소문자 파일이름)에 포함되어 있는지 확인
+                            # 키워드 매칭된 파일은 '전체 이름(확장자 제외)'으로 그룹
+                            samefile_groups.setdefault(matched_kw, []).append(path)    # 있다면 해당 키워드로 된 키를 가진 값으로 딕셔너리에 추가
+                        else:
+                            key = "no_match"
+                            samefile_groups.setdefault(key, []).append(path)    # 없다면 no_match 키를 가진 값으로 딕셔너리에 추가
 
-                    if key not in samefile_groups:
-                        samefile_groups[key] = []      # 딕셔너리에 해당 키 생성
-                    samefile_groups[key].append(path)
-
-                for key, files in samefile_groups.items():
-                    # 파일 복사
-                    for file_path in files:
-                        src = Path(file_path)   # 문자열 형태의 폴더 경로를 Path 객체로 변경 (여러 연산 활용 가능)
-                        if not src.exists():    # 파일 존재 여부 확인
-                            continue  # 이미 삭제된 파일은 건너뜀
-                        try:
-                            parent_name = src.parent.name       # 부모 폴더 이름 추출
-                            stem, suf = src.stem, src.suffix    # 파일 이름과 확장자 추출
-
-                            if len(files) == 1:
-                                # 원래 폴더 구조 유지: target_root 기준 상대경로
-                                rel_path = src.parent.relative_to(base_dir) 
-                                    # 파일의 부모폴더가 base_dir 하위에 있을 경우 base_dir 이후의 경로만 반환
-                                        # (base_dir을 기준으로 해당 파일의 상대 경로 반환)
-                                dst_dir = target_root / rel_path
-                            else:
-                                dst_dir = target_root / key
-
-                            dst_dir.mkdir(parents=True, exist_ok=True)  # 폴더 생성
-
-                            new_name = f"{stem}--({parent_name}){suf}"  # "파일이름--(부모폴더).확장자" 구조의 새 파일이름 생성
-                            shutil.copy2(str(src), str(dst_dir / new_name))      # 복사할 파일(src), 복사될 위치()
-                            self._log_print(f"[COPY] {src.name} -> {dst_dir}")    # 로그에 기록
-                        except Exception as e:
-                            self._log_print(f"[WARN] 복사 실패: {src} ({e})")       # 로그에 기록
+                if not samefile_groups:
+                    self._log_print("[INFO] 조건에 해당하는 파일이 없습니다.")
+                    return
+                
+                self._file_copy(target_root, samefile_groups, key_use, base_dir=self.selected_dir)
 
         os.startfile(target_root)       # 정리된 폴더 파일탐색기에 열기
-        QApplication.quit()             # 프로그램 종료
 
 
 

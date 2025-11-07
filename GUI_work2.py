@@ -1,4 +1,6 @@
-import os
+import os, platform, shutil
+from send2trash import send2trash
+
 # PyQt6 모듈로 변경
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QLabel, QPushButton, QScrollArea, QWidget,
@@ -6,7 +8,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
-from send2trash import send2trash
+
 
 
 class ImageGroupDialog(QDialog):
@@ -15,14 +17,15 @@ class ImageGroupDialog(QDialog):
     - "삭제 버튼" 버그 수정
     - "전체 선택" 기능 포함
     """
-    def __init__(self, dataset, parent=None):
+    def __init__(self, dataset, ft_root, parent=None):
         super().__init__(parent)
         self.setWindowTitle("중복/유사 이미지 그룹")
         self.resize(900, 700)
         self.setModal(True)
 
-        self.dataset = dataset
-        self.all_checkboxes = [] # 모든 체크박스 관리를 위한 리스트
+        self.dataset = dataset      # 정리할 파일들 데이터셋
+        self.ft_root = ft_root      # 정리될 위치 폴더 이름
+        self.all_checkboxes = []    # 모든 체크박스 관리를 위한 리스트
 
         # ===== Title =====
         title = QLabel("중복/유사 이미지 분석기")
@@ -141,22 +144,48 @@ class ImageGroupDialog(QDialog):
 
 
     def delete_selected(self):
+        os_name = platform.system()  # "Windows" | "Linux" | "Darwin"
+        tr_index = 1  # 파일 일련번호 시작값
         deleted_count = 0
-        for w in self.all_checkboxes:
-            if isinstance(w, QCheckBox) and w.isChecked() and w.isEnabled():
-                full_path = w.property("full_path")
-                if os.path.exists(full_path):
-                    try:
-                        send2trash(full_path)
-                        w.setText(w.text() + "  삭제됨")
-                        w.setEnabled(False)
-                        deleted_count += 1
-                    except Exception as e:
-                        w.setText(w.text() + f"  삭제 실패: {e}")
-        
+
+        match os_name:
+            # -------------------- Windows --------------------
+            case "Windows":
+                for w in self.all_checkboxes:
+                    if isinstance(w, QCheckBox) and w.isChecked() and w.isEnabled():
+                        full_path = w.property("full_path")
+                        if os.path.exists(full_path):
+                            try:
+                                send2trash(full_path)
+                                w.setText(w.text() + "  삭제됨")
+                                w.setEnabled(False)
+                                deleted_count += 1
+                            except Exception as e:
+                                w.setText(w.text() + f"  [ 삭제 실패 ]: {e}")
+
+            # -------------------- macOS / Linux / 기타 OS --------------------
+            case _:
+                trash_dir = os.path.join(self.ft_root, "Trash--(FT)")   # 휴지통 폴더이름 생성
+                os.makedirs(trash_dir, exist_ok=True)                   # 휴지통 폴더 생성
+
+                for w in self.all_checkboxes:
+                    if isinstance(w, QCheckBox) and w.isChecked() and w.isEnabled():
+                        full_path = w.property("full_path")                                 # 파일이름이 있는 체크박스 객체(w)에서 파일 전체 경로 추출
+                        if os.path.exists(full_path):
+                            try:
+                                name, ext = os.path.splitext(os.path.basename(full_path))   # 파일 전체경로에서 파일이름을 추출 -> 전체 파일이름에서 파일이름과 확장자를 추출
+                                new_name = f"{name}--(tr_{tr_index}){ext}"                  # 휴지통으로 옮겨진 파일 이름 생성
+                                shutil.move(full_path, os.path.join(trash_dir, new_name))   # 파일 이동
+                                w.setText(w.text() + f"  (삭제됨 → {new_name})")
+                                w.setEnabled(False)
+                                deleted_count += 1
+                                tr_index += 1
+                            except Exception as e:
+                                w.setText(w.text() + f"  [ 삭제 실패 ]: {e}")
+
         # 삭제 후 사용자에게 알림
         if deleted_count > 0:
-            QMessageBox.information(self, "삭제 완료", f"{deleted_count}개의 파일을 휴지통으로 보냈습니다.")
+            QMessageBox.information(self, "  [ 삭제 완료 ]", f"{deleted_count}개의 파일을 휴지통으로 보냈습니다.")
         else:
             QMessageBox.warning(self, "알림", "선택된 파일이 없습니다.")
             
