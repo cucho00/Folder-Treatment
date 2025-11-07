@@ -500,7 +500,7 @@ class MainWindow(QMainWindow):
         # 파일 이름이 비슷한 파일끼리 그룹화 하여 정리
         for key, files in groups.items():
             # 그룹 폴더 생성 (예: "보고서", "DATA", "IMG" 등)
-            dst_dir = target_root / "키워드 검색" / key
+            dst_dir = (target_root / "키워드 검색" / key) if mode == 1 else (target_root / "앞 5글자 그룹" / key)
             dst_dir.mkdir(parents=True, exist_ok=True)
 
             for file_path in files:
@@ -646,7 +646,7 @@ class MainWindow(QMainWindow):
                         samefile_groups[key].append(path)
                     else:
                         # ---- (B) 키워드 있음: 파일명에 키워드 포함된 것만 대상 ----
-                        name_l = name.lower()   # 이름의 소문자
+                        name_l = ud.normalize('NFC', name).casefold()  # ← 파일명도 정규화 + casefold
                         matched_kw = next((kw for kw in keywords if kw in name_l), None)    # keywords 안의 kw값을 하나씩 넘기며 name_l에 포함된 키워드만 걸러냄
                             # kw for kw in keywords if kw in name_l = "for kw in keywords if kw in name_l" 조건에 맞는 kw만 반환
                             # next() = 해당 값에서 첫번째 값만 반환 (값이 없다면 None 반환)
