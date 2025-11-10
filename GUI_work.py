@@ -141,6 +141,29 @@ class MainWindow(QMainWindow):
         self.btn_last = QPushButton("라벨대로 파일 정리 시작")
         self.btn_last.setObjectName("SpecialButton") # QSS용 ID (특별 버튼)
 
+        self.ext_group = QGroupBox("확장자 필터")
+        ext_layout = QVBoxLayout()
+        # 전체 선택 체크박스 (위)
+        self.cb_select_all = QCheckBox("전체 선택")     # "전체 선택" 토글 체크박스 생성
+        self.cb_select_all.setChecked(True)             # 기본값: 전체 체크
+        self.cb_select_all.stateChanged.connect(self._select_all_exts)    # 사용자가 체크/해제할 때 호출될 콜백 함수 연결
+        ext_layout.addWidget(self.cb_select_all)    # 체크박스를 그룹 박스 레이아웃에 추가
+        # 확장자 선택 체크박스 (아래)
+        self._ext_options = ['.jpg', '.jpeg', '.png', '.bmp']   # 체크박스에 표시될 확장자 4개
+        self.selected_exts = set(self._ext_options)             # 초기 전체 체크 상태 저장
+        self.ext_checkboxes = {}                                # {'.jpg': QCheckBox, ...} 형태로 체크박스 객체 저장
+        row = QHBoxLayout()         # 체크박스를 저장할 가로 레이아웃 객체
+        for ext in self._ext_options:
+            cb = QCheckBox(ext.upper())     # 체크박스 객체 생성
+            cb.setChecked(True)             # 초기 체크박스 상태는 체크된 상태(True)
+            cb.stateChanged.connect(self._on_ext_changed)   # 체크박스가 체크/해제할 때 호출될 함수 연결
+            self.ext_checkboxes[ext] = cb
+            row.addWidget(cb)
+        ext_layout.addLayout(row)
+        ext_layout.addStretch(1)
+        # 각 체크박스 레이아웃 추가
+        self.ext_group.setLayout(ext_layout)
+
         self.grp_keyword = QGroupBox("키워드 필터 (이름에 포함된 파일만 대상)")
         kw_layout = QHBoxLayout()   # 키워드 입력 레이어 (가로 나열)
         kw_layout.addSpacing(10)
@@ -149,8 +172,11 @@ class MainWindow(QMainWindow):
         self.ed_kw3, self.lbl_kw3 = self._make_kw_row(kw_layout, 2)     # 키워드 3
         self.grp_keyword.setLayout(kw_layout)
 
+
         tab_dedupe_layout.addWidget(dedupe1_title)
         tab_dedupe_layout.addSpacing(15)
+        tab_dedupe_layout.addWidget(self.ext_group)
+        tab_dedupe_layout.addSpacing(10)
         tab_dedupe_layout.addWidget(self.btn_next)
         tab_dedupe_layout.addStretch(1)
 
@@ -204,6 +230,33 @@ class MainWindow(QMainWindow):
             self._log_print(f"[WARN] Stylesheet file not found at {qss_file_path}")
         except Exception as e:
             self._log_print(f"[ERROR] Failed to load stylesheet: {e}")
+
+    # ---- 이미지 파일 확장자 체크박스 동작 ----
+    def _select_all_exts(self, state: int):
+        checked = (state == Qt.CheckState.Checked.value)
+            # 0 = 체크해제, 1 = 삼상 체크용, 2 = 체크됨
+        for cb in self.ext_checkboxes.values():
+            old = cb.blockSignals(True)     # (시그널 루프 방지) 이 함수가 동작되는 동안 다른 함수 호출을 무시
+            cb.setChecked(checked)          # 개별 체크박스를 반복문으로 하나씩 전체체크박스 상태와 동일하게 변경 (체크표시 -> 다른것도 다 체크표시, 체크해제 -> 다른것도 다 체크 해제)
+            cb.blockSignals(old)            # (시그널 루프 방지) 각 체크박스의 체크여부 변경 후 다시 함수 호출을 받을 수 있도록 변경
+        self._refresh_selected_exts()   # 체크 결과를 내부 변수로 저장하는 함수 호출
+    
+    def _on_ext_changed(self, state: int):
+        all_checked = all(cb.isChecked() for cb in self.ext_checkboxes.values())
+            # 반복문을 통해 모든 cb(체크박스)가 전부 체크되어있는지 여부 확인
+
+        old = self.cb_select_all.blockSignals(True) # (시그널 루프 방지) 이 함수가 동작되는 동안 다른 함수 호출을 무시
+        self.cb_select_all.setChecked(all_checked)  # 전체선택 체크박스를 나머지 체크박스가 전부 체크되어있는가, 그중 하나라도 체크가 해제되었는가에 따라 체크여부를 변화
+        self.cb_select_all.blockSignals(old)        # (시그널 루프 방지) 각 체크박스의 체크여부 변경 후 다시 함수 호출을 받을 수 있도록 변경
+
+        self._refresh_selected_exts()   # 체크 결과를 내부 변수로 저장하는 함수 호출
+
+    # 체크박스에 체크된 확장자들만 추출해서 self.selected_exts 변수에 set(집합)타입으로 저장
+        # set 타입 = {'.jpg', '.png', '.bmp'}
+    def _refresh_selected_exts(self):   
+        self.selected_exts = {
+            ext for ext, cb in self.ext_checkboxes.items() if cb.isChecked()
+        }
 
     # ---- 키워드 입력창 생성 ----
     def _make_kw_row(self, QV :QVBoxLayout, idx: int):
@@ -455,7 +508,7 @@ class MainWindow(QMainWindow):
             return
         
         self._log_print("[Dedupe] 중복 분석 창 표시...")
-        dlg = ImageGroupDialog(self.dataset, self.ft_root, parent=self)
+        dlg = ImageGroupDialog(self.dataset, self.ft_root, parent=self, selected_exts=list(self.selected_exts))
         dlg.exec()
 
 

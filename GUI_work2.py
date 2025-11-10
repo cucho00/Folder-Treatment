@@ -1,13 +1,14 @@
 import os, platform, shutil
+from datetime import datetime
 from send2trash import send2trash
 
 # PyQt6 모듈로 변경
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QLabel, QPushButton, QScrollArea, QWidget,
-    QGroupBox, QHBoxLayout, QCheckBox, QApplication, QMessageBox
+    QGroupBox, QHBoxLayout, QCheckBox, QApplication, QMessageBox, QSizePolicy
 )
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont, QFontMetrics
 
 
 
@@ -17,15 +18,16 @@ class ImageGroupDialog(QDialog):
     - "삭제 버튼" 버그 수정
     - "전체 선택" 기능 포함
     """
-    def __init__(self, dataset, ft_root, parent=None):
+    def __init__(self, dataset, ft_root, parent=None, selected_exts=None):
         super().__init__(parent)
         self.setWindowTitle("중복/유사 이미지 그룹")
         self.resize(900, 700)
         self.setModal(True)
 
-        self.dataset = dataset      # 정리할 파일들 데이터셋
-        self.ft_root = ft_root      # 정리될 위치 폴더 이름
-        self.all_checkboxes = []    # 모든 체크박스 관리를 위한 리스트
+        self.dataset = dataset              # 정리할 파일들 데이터셋
+        self.ft_root = ft_root              # 정리될 위치 폴더 이름
+        self.all_checkboxes = []            # 모든 체크박스 관리를 위한 리스트
+        self.selected_exts = selected_exts  # 선택한 확장자 목록 (이미지 중복 제거)
 
         # ===== Title =====
         title = QLabel("중복/유사 이미지 분석기")
@@ -59,10 +61,10 @@ class ImageGroupDialog(QDialog):
             self.setStyleSheet(parent.styleSheet())
             
         # ===== 분석 즉시 실행 =====
-        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)   # 커서가 로딩 아이콘(모래시계)으로 바뀜
         try:
-            result = self.dataset.get_images_extract()
-            self.display_result(result) # <--- 이 함수가 버튼을 활성화시킬 것임
+            result = self.dataset.get_images_extract(self.selected_exts)  # AI 분석 진행 (app.py 파일의 PyG_Dataset.get_images_extract() 호출)
+            self.display_result(result) # <--- 이 함수가 버튼을 활성화시킬 것임 (UI에 표시)
         except Exception as e:
             self.result_layout.addWidget(QLabel(f" 분석 중 오류: {e}"))
             # (오류 발생 시 버튼은 비활성화 상태 유지)
@@ -97,12 +99,111 @@ class ImageGroupDialog(QDialog):
             # (버튼은 비활성화 상태 유지)
 
 
+    # 유사도 높은 각 파일들의 상태 표시
+    def _make_item_row(self, full, name, parent, mtime_fmt, size_fmt, sim, widths=None, mono_numeric=False):
+        row = QWidget()                     # 파일 1개를 표현할 행 위젯
+        h = QHBoxLayout(row)                # row의 내부 레이아웃
+        h.setContentsMargins(6, 2, 6, 2)
+        h.setSpacing(10)
+
+        # 체크박스 (파일의 전체경로가 설정)
+        cb = QCheckBox()
+        cb.setProperty("full_path", full)
+        cb.setToolTip(full)
+        # 나머지 옵션 (파일이름, 부모 폴더, 수정 시간, 파일크기, 유사도)
+        name_lbl = QLabel(name)
+        folder_lbl = QLabel(parent or "-")
+        mtime_lbl = QLabel(mtime_fmt)
+        size_lbl = QLabel(size_fmt)
+        sim_lbl  = QLabel(f"{sim:.1f}%")
+
+        for lbl in (mtime_lbl, size_lbl, sim_lbl):      # 모든 라벨 우측정렬, 세로기준선은 중앙에 위치
+            lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)   
+
+        # 숫자/날짜 열 모노스페이스 적용(수정날짜, 파일크기, 유사도와 같은 숫자 항목은 각 글자별 크기 폭이 동일하게 지정)
+        if mono_numeric:
+            mono = QFont("Consolas")  # OS에 맞는 모노폰트로 바꿔도 됨
+            for lbl in (mtime_lbl, size_lbl, sim_lbl):
+                lbl.setFont(mono)
+        # 세 항목간 고정 폭 적용 (모든 행 동일)
+        if widths:
+            mtime_lbl.setFixedWidth(widths["date"])
+            size_lbl.setFixedWidth(widths["size"])
+            sim_lbl.setFixedWidth(widths["sim"])
+
+        # 가로로 나열(h) [CB] [이름(늘어남)] [폴더(늘어남)] [수정] [크기] [유사도]
+        h.addWidget(cb)
+        h.addWidget(name_lbl, 2)    # 가변
+        h.addWidget(folder_lbl, 1)  # 가변
+        h.addWidget(mtime_lbl)      # 고정
+        h.addWidget(size_lbl)       # 고정
+        h.addWidget(sim_lbl)        # 고정
+
+        self.group_checkboxes.append(cb) # 리스트에 추가
+        self.all_checkboxes.append(cb) # 전체 리스트에도 추가
+        return row
+
+    # 파일크기 정형화
+    def _human_size_kb(self, kb: float) -> str:
+        if kb is None:
+            return "-"
+        s = float(kb) * 1024.0
+        for unit in ["B", "KB", "MB", "GB", "TB"]:
+            if s < 1024.0:
+                return f"{s:.1f} {unit}"
+            s /= 1024.0
+        return f"{s:.1f} PB"
+    
+    def _calc_column_widths(self, sample_font: QFont) -> dict:
+        fm = QFontMetrics(sample_font)
+        # 대충 최대치를 커버하는 템플릿 문자열로 계산
+        w_date = fm.horizontalAdvance("2025-12-31 23:59")
+        w_size = fm.horizontalAdvance("9999.9 MB")   # KB/MB 판단해 여유 있게
+        w_sim  = fm.horizontalAdvance("100.0%")
+        # 여유 패딩
+        return {"date": w_date + 8, "size": w_size + 8, "sim": w_sim + 8}
+    
+    def _make_header_row(self, widths: dict):
+        row = QWidget()
+        row.setObjectName("HeaderRow")  # 스키마 헤더 디자인 적용
+        h = QHBoxLayout(row)
+        h.setContentsMargins(6,2,6,2); h.setSpacing(10)
+
+        h.addWidget(QLabel(""), 0)              # 체크박스 칸
+        lab_name = QLabel("파일이름");  lab_folder = QLabel("부모폴더")
+        lab_date = QLabel("최근 수정"); lab_size = QLabel("크기"); lab_sim = QLabel("유사도")
+        lab_name.setObjectName("HdrName")       # 파일 이름 디자인
+        lab_folder.setObjectName("HdrFolder")   # 부모 폴더 이름 디자인
+
+        # 정렬/굵기
+        for lab in (lab_name, lab_folder, lab_date, lab_size, lab_sim):
+            lab.setStyleSheet("font-weight:600;")
+        for lab in (lab_date, lab_size, lab_sim):
+            lab.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+
+        h.addWidget(lab_name, 2)
+        h.addWidget(lab_folder, 1)
+
+        lab_date.setFixedWidth(widths["date"])
+        lab_size.setFixedWidth(widths["size"])
+        lab_sim.setFixedWidth(widths["sim"])
+
+        h.addWidget(lab_date)
+        h.addWidget(lab_size)
+        h.addWidget(lab_sim)
+        return row
+
     def add_group_section(self, title, groups):
-        # 섹션 그룹박스 (QGroupBox)
-        section = QGroupBox(title)
+        section = QGroupBox(title)                  # 섹션 그룹박스 (QGroupBox)
         section_layout = QVBoxLayout()
 
         if groups:
+            widths = self._calc_column_widths(self.font())              # 한 번만 폭 계산(현재 폰트 기준)
+
+            # 파일에 대한 각 항목 헤더(스키마)
+            header = self._make_header_row(widths)
+            section_layout.addWidget(header)
+
             for g_idx, group in enumerate(groups, 1):
                 group_box = QGroupBox(f"그룹 {g_idx} ({len(group)}개)")
                 group_box.setObjectName("InnerGroup") # QSS용 ID
@@ -110,30 +211,34 @@ class ImageGroupDialog(QDialog):
                 
                 # --- "전체 선택" 체크박스 추가 ---
                 chk_all = QCheckBox("이 그룹 전체 선택")
-                group_checkboxes = [] # 이 그룹에 속한 체크박스 리스트
-                
-                for idx, sim in group:
-                    full_path = self.dataset.idx_to_path[idx]
-                    fname = os.path.basename(full_path)
+                self.group_checkboxes = []               # 이 그룹에 속한 체크박스 리스트
+                group_layout.addWidget(chk_all)     # 체크박스 전체선택을 추가 (가장 먼저)
+
+                # 그룹 아이템은 (idx, sim, full, name, parent, mtime, size_kb) 형태
+                for item in group:
+                    try:
+                        idx, sim, full, name, parent, mtime, size_kb = item[:7]
+                    except Exception:
+                        # 혹시 일부 항목이 빠져있을 경우 안전하게 처리
+                        continue
+                    try:
+                        mtime_fmt = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M")    # 날짜 포멧팅
+                    except Exception:   
+                        mtime_fmt = "-"
+                    size_fmt = self._human_size_kb(size_kb)                                     # 크기 포멧팅
                     
-                    h_layout = QHBoxLayout()
-                    checkbox = QCheckBox(f"{fname} (유사도: {sim:.1f}%)")
-                    checkbox.setChecked(False)
-                    checkbox.setProperty("full_path", full_path)
-                    
-                    h_layout.addWidget(checkbox)
-                    group_layout.addLayout(h_layout)
-                    
-                    group_checkboxes.append(checkbox) # 리스트에 추가
-                    self.all_checkboxes.append(checkbox) # 전체 리스트에도 추가
+                    row = self._make_item_row(full, name, parent, mtime_fmt, size_fmt, sim,
+                                              widths=widths, mono_numeric=True)
+                    group_layout.addWidget(row)         
 
                 # "전체 선택" 시그널 연결
-                chk_all.toggled.connect(lambda checked, boxes=group_checkboxes: [
-                    box.setChecked(checked) for box in boxes if box.isEnabled()
-                ])
-                
+                def on_all_toggled(checked, boxes=self.group_checkboxes):
+                    for box in boxes:
+                        if box.isEnabled():
+                            box.setChecked(checked)
+                chk_all.toggled.connect(on_all_toggled)
+
                 # 그룹 레이아웃의 맨 위에 '전체 선택' 추가
-                group_layout.insertWidget(0, chk_all) 
                 group_box.setLayout(group_layout)
                 section_layout.addWidget(group_box)
         else:

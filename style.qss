@@ -243,3 +243,19 @@ QScrollBar::handle:vertical:hover {
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
     height: 0px;
 }
+
+/* 헤더(스키마) 라인 */
+#HeaderRow {
+    background: #2b2f36;
+    border-radius: 6px;
+    padding: 4px 6px;
+}
+#HeaderRow QLabel {
+    color: #e6edf3;
+    font-weight: 600;
+}
+/* 이름/폴더만 더 밝게 */
+#HeaderRow QLabel#HdrName, 
+#HeaderRow QLabel#HdrFolder {
+    color: #ffffff;
+}

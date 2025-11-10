@@ -118,5 +118,5 @@ class PyG_Dataset:
 
 
     # 외부에 정의된 함수를 그대로 호출해서 결과를 반환하는 래퍼(wrapper) 메서드
-    def get_images_extract(self) -> dict:
-        return analyze_folder(self.idx_to_path ,self.G)
+    def get_images_extract(self, selected_exts=None) -> dict:
+        return analyze_folder(self.idx_to_path ,self.G, selected_exts=selected_exts)
